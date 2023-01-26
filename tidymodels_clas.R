@@ -178,15 +178,70 @@ telecom_results %>%
     estimate = .pred_yes
   )
 
+#### more models
 
-# rf_model <- rand_forest() %>%
-#   # Set the engine
-#   set_engine("randomForest") %>%
-#   # Set the mode
-#   set_mode("classification")
+rf_model <- rand_forest() %>%
+  # Set the engine
+  set_engine("randomForest") %>%
+  # Set the mode
+  set_mode("classification")
+
+nn_model <- mlp() %>% 
+  set_engine('nnet') %>% 
+  set_mode("classification")
+
+### replicates
+
+folds <- vfold_cv(telecom_df, v = 20,strata = canceled_service)
+
+### workflow
+
+model_vars <- 
+  workflow_variables(outcomes = canceled_service, 
+                     predictors =c(avg_call_mins,avg_intl_mins,monthly_charges) )
+
+normalized <- 
+  workflow_set(preproc = list(simple = model_vars),
+               models = list(log_reg=logistic_model,
+                             ran_for=rf_model,
+                             nue_net=nn_model))
+
+grid_ctrl <-
+  control_grid(
+    save_pred = TRUE,
+    parallel_over = "everything",
+    save_workflow = TRUE
+  )
+
+grid_results <-
+  normalized %>%
+  workflow_map(
+    seed = 1503,
+    resamples = folds,
+    grid = 25,
+    control = grid_ctrl
+  )
+
+grid_results
+
+grid_results %>% 
+  rank_results()
+
+
+autoplot(
+  grid_results,
+  rank_metric = "accuracy",  # <- how to order models
+  metric = "accuracy",       # <- which metric to visualize
+  select_best = TRUE     # <- one point per workflow
+) +
+  geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
+  lims(y = c(0.55, 0.75)) +
+  theme(legend.position = "none")
+
 # 
 # rf_fit <- rf_model %>%
 #   fit(
 #     canceled_service ~ avg_call_mins + avg_intl_mins + monthly_charges,
 #     data = telecom_training
 #   )
+# Predict outcome categories
